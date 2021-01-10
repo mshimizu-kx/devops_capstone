@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hdb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kdb
+  template:
+    metadata:
+      labels:
+        app: kdb
+    spec:
+      containers:
+        - name: kdb-hdb
+          image: mshimizukx/kdb-hdb
+          resources:
+            requests:
+              cpu: 200m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hdb
+spec:
+  type: NodePort
+  selector:
+    app: kdb
+  ports:
+    - port: 80
+      protocol: TCP
+      nodePort: 31600
