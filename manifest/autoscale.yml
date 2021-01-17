@@ -18,6 +18,13 @@ spec:
           resources:
             requests:
               cpu: 200m
+          volumeMounts:
+            - name: s3-hdbfs
+              mountPath: /var/s3hdb:shared
+      volumes:
+        - name: s3-hdbfs
+          hostPath:
+            path: /mnt/s3data
 ---
 apiVersion: v1
 kind: Service

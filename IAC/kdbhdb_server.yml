@@ -1,0 +1,309 @@
+############################################
+#             File Description             #
+############################################
+
+Description: >
+  Server configuration for capstone project.
+
+############################################
+#                Parameters                #
+############################################
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+
+  SSHKey:
+    Description: The EC2 Key Pair to allow SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+
+############################################
+#                 Resources                #
+############################################
+
+Resources:
+
+##%% Custer Security Group %%###############
+
+  # Control worker nodes
+  ClusterSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Communication with nodes
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+      SecurityGroupEgress:
+        - DestinationSecurityGroupId: !Ref KDBNodeSecGroup
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+        - IpProtocol: tcp
+          FromPort: 1025
+          ToPort: 65535
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443  
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-Cluster-SG"
+
+  # Forward query from load balancer to kdb+s
+  KDBNodeSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Allow HTTP to our kdb+s.
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+      SecurityGroupEgress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        # From master
+        - IpProtocol: tcp
+          FromPort: 1025
+          ToPort: 65535
+        # Maybe covered by private route table
+        - IpProtocol: '-1'
+          FromPort: 0
+          ToPort: 65535
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-KDBNode-SG"
+
+##%% Create Cluster %%######################
+
+  # Role for Kuberenetes Master
+  KubernetesIAMRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "eks.amazonaws.com"
+          Action:
+            - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+      Path: "/"
+      RoleName: !Sub "${EnvironmentName}-Cluster-Role"
+  
+  # Kuberenetes cluster on which kdb+s run
+  KDBCluster:
+    Type: AWS::EKS::Cluster
+    Properties: 
+      Name: !Sub ${EnvironmentName}-KDBHDB
+      Version: "1.18"
+      ResourcesVpcConfig: 
+        SecurityGroupIds:
+          - !Ref ClusterSecGroup
+        SubnetIds:
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PUBLIC-SUBNETS
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PRIVATE-SUBNETS
+      RoleArn: !GetAtt KubernetesIAMRole.Arn
+
+##%% Kubernetes Node %%#####################
+
+  NodeRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      Description: Role for Node to join cluster
+      RoleName: KDBNodeRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+
+  ProfileWithRolesForKDB:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Roles:
+        - !Ref NodeRole
+
+  # Initializer of KDB Node
+  NodeLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: 'false'
+      # For debug
+      KeyName: !Ref SSHKey
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo apt-get update -y
+          sudo apt-get install python-pip -y
+          sudo pip install awscli
+          sudo apt-get install unzip -y
+          sudo apt-get install apache2 -y
+          sudo systemctl start apache2.service
+          aws s3 cp s3://udacity-demo-1/udacity.zip .
+          unzip -o udacity.zip
+          echo "Udacity Demo Web Server Up and Running!" > index.html
+          sudo cp index.html /var/www/html/index.html
+      # Ubuntu 18.04
+      ImageId: ami-0ac73f33a1888c64a
+      IamInstanceProfile: !Ref ProfileWithRolesForKDB
+      SecurityGroups:
+        - Ref: KDBNodeSecGroup
+      InstanceType: t2.medium
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sdk"
+          Ebs:
+            VolumeSize: '10'
+            VolumeType: gp2
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64:
+          !Sub |
+          #!/bin/bash
+          set -o xtrace
+          /etc/eks/bootstrap.sh ${EKSClusterName} ${BootstrapArguments}
+          /opt/aws/bin/cfn-signal --exit-code $? \
+                   --stack  ${AWS::StackName} \
+                   --resource NodeGroup  \
+                   --region ${AWS::Region}
+
+  # Autoscaling config
+  KDBGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI3-SN
+      LaunchConfigurationName: !Ref NodeLaunchConfig
+      MinSize: '2'
+      MaxSize: '4'
+      TargetGroupARNs:
+        - Ref: KDBTargetGroup
+      UpdatePolicy:
+        AutoScalingRollingUpdate:
+          MinInstancesInService: '1'
+          MaxBatchSize: '1'
+
+  # Polling target
+  KDBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 60
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 30
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+
+  ##%% Load Balancer %%#######################
+
+  # Internet to load balancer
+  LBSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Allow HTTP to load balancer
+      SecurityGroupEgress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+
+  # Load balancer
+  WebAppLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+      - Fn::ImportValue: !Sub ${EnvironmentName}-PUB1-SN
+      - Fn::ImportValue: !Sub ${EnvironmentName}-PUB2-SN
+      SecurityGroups:
+      - Ref: LBSecGroup
+
+  # Bridge between load balancer and kdb+s
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: KDBTargetGroup
+      LoadBalancerArn:
+        Ref: WebAppLB
+      Port: '80'
+      Protocol: HTTP
+
+  # Forward 
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref 'WebAppTargetGroup'
+      Conditions:
+      - Field: path-pattern
+        Values: [/]
+      ListenerArn: !Ref 'Listener'
+      Priority: 1
+
+############################################
+#                 Outputs                  #
+############################################
+
+Outputs: 
+
+  KDBCluster:
+    Description: Endpoint of master node.
+    Value: !Sub "${KDBCluster.Endpoint}"
+    Export:
+      Name: !Sub ${EnvironmentName}-MASTER-URL
+
+  NodeRole:
+    Description: ARN of node role.
+    Value: !Sub "${NodeInstanceRole.Arn}"
+    Export:
+      Name: !Sub ${EnvironmentName}-NODE-ROLE
+
+  WebAppLB:
+    Description: URL of the load balancer.
+    Value: !Sub "http://${WebAppLB.DNSName}"
+    Export:
+      Name: !Sub ${EnvironmentName}-LB-URL

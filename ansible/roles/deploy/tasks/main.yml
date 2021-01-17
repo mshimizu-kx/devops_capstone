@@ -1,0 +1,15 @@
+---
+- name: Upgrade npm
+  become: true
+  shell: |
+    npm install -g npm@latest
+
+- name: Copy compiled files
+  unarchive:
+    src: /root/project/backend.tar.gz
+    dest: /home/ubuntu/
+
+- name: Executing node
+  shell: |
+    cd backend/dist
+    pm2 start main.js --name backend
