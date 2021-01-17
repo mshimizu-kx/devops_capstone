@@ -34,17 +34,35 @@ Resources:
       VpcId:
         Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
       SecurityGroupEgress:
-        - DestinationSecurityGroupId: !Ref KDBNodeSecGroup
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          DestinationSecurityGroupId: !Ref KDBNodeSecGroup
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
+          DestinationSecurityGroupId: !Ref KDBNodeSecGroup
         - IpProtocol: tcp
           FromPort: 1025
           ToPort: 65535
+          DestinationSecurityGroupId: !Ref KDBNodeSecGroup
+        - IpProtocol: udp
+          FromPort: 1025
+          ToPort: 65535
+          DestinationSecurityGroupId: !Ref KDBNodeSecGroup
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443  
+          SourceSecurityGroupId: !Ref KDBNodeSecGroup
+        - IpProtocol: tcp
+          FromPort: 1025
+          ToPort: 65535
+          SourceSecurityGroupId: !Ref KDBNodeSecGroup
+        - IpProtocol: udp
+          FromPort: 1025
+          ToPort: 65535
+          SourceSecurityGroupId: !Ref KDBNodeSecGroup
       Tags:
         - Key: Name
           Value: !Sub "${EnvironmentName}-Cluster-SG"
@@ -56,7 +74,7 @@ Resources:
       GroupDescription: Allow HTTP to our kdb+s.
       VpcId:
         Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
-      SecurityGroupEgress: 
+      SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
@@ -69,7 +87,18 @@ Resources:
           FromPort: 0
           ToPort: 65535
           CidrIp: 0.0.0.0/0
+        - IpProtocol: udp
+          FromPort: 1025
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
       SecurityGroupIngress:
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
@@ -82,10 +111,19 @@ Resources:
         - IpProtocol: tcp
           FromPort: 1025
           ToPort: 65535
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: udp
+          FromPort: 1025
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
         # Maybe covered by private route table
         - IpProtocol: '-1'
           FromPort: 0
           ToPort: 65535
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: !Sub "${EnvironmentName}-KDBNode-SG"
@@ -103,8 +141,8 @@ Resources:
             Principal:
               Service:
                 - "eks.amazonaws.com"
-          Action:
-            - "sts:AssumeRole"
+            Action:
+              - "sts:AssumeRole"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
         - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
@@ -121,9 +159,12 @@ Resources:
         SecurityGroupIds:
           - !Ref ClusterSecGroup
         SubnetIds:
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PUBLIC-SUBNETS
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PRIVATE-SUBNETS
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB1-SN
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB2-SN
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
       RoleArn: !GetAtt KubernetesIAMRole.Arn
+    DependsOn: ['KubernetesIAMRole', 'ClusterSecGroup']
 
 ##%% Kubernetes Node %%#####################
 
@@ -145,6 +186,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
         - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
 
   ProfileWithRolesForKDB:
     Type: AWS::IAM::InstanceProfile
@@ -158,22 +200,18 @@ Resources:
     Properties:
       AssociatePublicIpAddress: 'false'
       # For debug
-      KeyName: !Ref SSHKey
+      KeyName: !Sub ${SSHKey}
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          sudo apt-get update -y
-          sudo apt-get install python-pip -y
-          sudo pip install awscli
-          sudo apt-get install unzip -y
-          sudo apt-get install apache2 -y
-          sudo systemctl start apache2.service
-          aws s3 cp s3://udacity-demo-1/udacity.zip .
-          unzip -o udacity.zip
-          echo "Udacity Demo Web Server Up and Running!" > index.html
-          sudo cp index.html /var/www/html/index.html
-      # Ubuntu 18.04
-      ImageId: ami-0ac73f33a1888c64a
+          set -o xtrace
+          /etc/eks/bootstrap.sh ${EnvironmentName}-KDBHDB ""
+          /opt/aws/bin/cfn-signal --exit-code $? \
+                   --stack  ${AWS::StackName} \
+                   --resource NodeGroup  \
+                   --region ${AWS::Region}
+      # AWS EKS optimized-ami
+      ImageId: ami-08dfdd0ffca05d36d
       IamInstanceProfile: !Ref ProfileWithRolesForKDB
       SecurityGroups:
         - Ref: KDBNodeSecGroup
@@ -184,16 +222,6 @@ Resources:
             VolumeSize: '10'
             VolumeType: gp2
             DeleteOnTermination: true
-      UserData:
-        Fn::Base64:
-          !Sub |
-          #!/bin/bash
-          set -o xtrace
-          /etc/eks/bootstrap.sh ${EKSClusterName} ${BootstrapArguments}
-          /opt/aws/bin/cfn-signal --exit-code $? \
-                   --stack  ${AWS::StackName} \
-                   --resource NodeGroup  \
-                   --region ${AWS::Region}
 
   # Autoscaling config
   KDBGroup:
@@ -202,16 +230,16 @@ Resources:
       VPCZoneIdentifier:
         - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
         - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
-        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI3-SN
+        #- Fn::ImportValue: !Sub ${EnvironmentName}-PRI3-SN
       LaunchConfigurationName: !Ref NodeLaunchConfig
       MinSize: '2'
       MaxSize: '4'
       TargetGroupARNs:
         - Ref: KDBTargetGroup
-      UpdatePolicy:
-        AutoScalingRollingUpdate:
-          MinInstancesInService: '1'
-          MaxBatchSize: '1'
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: '1'
+        MaxBatchSize: '1'
 
   # Polling target
   KDBTargetGroup:
@@ -276,11 +304,11 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       Actions:
-      - Type: forward
-        TargetGroupArn: !Ref 'WebAppTargetGroup'
+        - Type: forward
+          TargetGroupArn: !Ref KDBTargetGroup
       Conditions:
-      - Field: path-pattern
-        Values: [/]
+        - Field: path-pattern
+          Values: [/]
       ListenerArn: !Ref 'Listener'
       Priority: 1
 
@@ -298,7 +326,7 @@ Outputs:
 
   NodeRole:
     Description: ARN of node role.
-    Value: !Sub "${NodeInstanceRole.Arn}"
+    Value: !Sub "${NodeRole.Arn}"
     Export:
       Name: !Sub ${EnvironmentName}-NODE-ROLE
 

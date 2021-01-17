@@ -5,5 +5,3 @@ metadata:
 data:
   S3_REGION: "us-west-2"
   S3_BUCKET: "udacity-hdb"
-  AWS_KEY: "AKIAZZQJRC7ZNHUVGGMO"
-  AWS_SECRET_KEY: "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"
