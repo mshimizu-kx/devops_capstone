@@ -46,7 +46,7 @@ single_scripts/add_connection.sh ${ENVIRONMENT_NAME}-KDBHDB
 
 # Get Node role ARN for cluster authorization
 echo -n "Get Node Role ARN from built stack..."
-NODE_ROLE_ARN=$(aws cloudformation list-exports --query "Exports[?Name==\`UdacityProject-NODE-ROLE\`].Value" --no-paginate --output text)
+NODE_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name  ${SERVER_STACKNAME} --query 'Stacks[0].Outputs[?OutputKey==`NodeInstanceRole`].OutputValue' --output text)
 echo -e "\e[32mok\e[0m"
 echo "Found Node Role ARN from built stack: ${NODE_ROLE_ARN}"
 

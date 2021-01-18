@@ -4,7 +4,11 @@
         "ParameterValue": "UdacityProject"
     },
     {
-        "ParameterKey": "SSHKey",
+        "ParameterKey": "ClusterName",
+        "ParameterValue": "UdacityProject-KDBHDB"
+    },
+    {
+        "ParameterKey": "KeyName",
         "ParameterValue": "udacity"
     }
 ]

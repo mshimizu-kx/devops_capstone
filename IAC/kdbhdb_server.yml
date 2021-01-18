@@ -2,21 +2,128 @@
 #             File Description             #
 ############################################
 
-Description: >
-  Server configuration for capstone project.
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Amazon EKS - Node Group
+
+############################################
+#                 Metadata                #
+############################################
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: EKS Cluster
+        Parameters:
+          - ClusterName
+      - Label:
+          default: Worker Node Configuration
+        Parameters:
+          - NodeGroupName
+          - NodeAutoScalingGroupMinSize
+          - NodeAutoScalingGroupMaxSize
+          - NodeInstanceType
+          - NodeImageIdSSMParam
+          - NodeImageId
+          - NodeVolumeSize
+          - KeyName
+          - BootstrapArguments
+          - DisableIMDSv1
 
 ############################################
 #                Parameters                #
 ############################################
 
 Parameters:
-  EnvironmentName:
-    Description: An environment name that will be prefixed to resource names
-    Type: String
 
-  SSHKey:
+  EnvironmentName:
+    Type: String
+    Description: An environment name that will be prefixed to resource names
+
+  BootstrapArguments:
+    Type: String
+    Default: ""
+    Description: "Arguments to pass to the bootstrap script. See files/bootstrap.sh in https://github.com/awslabs/amazon-eks-ami"
+
+  ClusterName:
+    Type: String
+    Description: The cluster name provided when the cluster was created. If it is incorrect, nodes will not be able to join the cluster.
+
+  KeyName:
+    Type: "AWS::EC2::KeyPair::KeyName"
     Description: The EC2 Key Pair to allow SSH access to the instances
-    Type: AWS::EC2::KeyPair::KeyName
+
+  NodeAutoScalingGroupMaxSize:
+    Type: Number
+    Default: 4
+    Description: Maximum size of Node Group ASG. Set to at least 1 greater than NodeAutoScalingGroupDesiredCapacity.
+
+  NodeAutoScalingGroupMinSize:
+    Type: Number
+    Default: 1
+    Description: Minimum size of Node Group ASG.
+
+  NodeGroupName:
+    Type: String
+    Default: "KDB"
+    Description: Unique identifier for the Node Group.
+
+  NodeImageId:
+    Type: String
+    Default: ""
+    Description: (Optional) Specify your own custom image ID. This value overrides any AWS Systems Manager Parameter Store value specified above.
+
+  NodeImageIdSSMParam:
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    #Default: /aws/service/eks/optimized-ami/1.17/amazon-linux-2/recommended/image_id
+    Default: /aws/service/eks/optimized-ami/1.18/amazon-linux-2/recommended/image_id
+    Description: AWS Systems Manager Parameter Store parameter of the AMI ID for the worker node instances. Change this value to match the version of Kubernetes you are using.
+
+  DisableIMDSv1:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "false"
+      - "true"
+
+  NodeInstanceType:
+    Type: String
+    Default: t2.medium
+    AllowedValues:
+      - t2.medium
+      - t2.micro
+      - t2.nano
+      - t2.small
+      - t2.xlarge
+      - t3.large
+      - t3.medium
+      - t3.micro
+      - t3.nano
+      - t3.small
+    ConstraintDescription: Must be a valid EC2 instance type
+    Description: EC2 instance type for the node instances
+
+  NodeVolumeSize:
+    Type: Number
+    Default: 10
+    Description: Node volume size
+
+############################################
+#               Conditions                 #
+############################################
+
+Conditions:
+
+  HasNodeImageId: !Not
+    - "Fn::Equals":
+      - !Ref NodeImageId
+      - ""
+
+  IMDSv1Disabled:
+    "Fn::Equals":
+      - !Ref DisableIMDSv1
+      - "true"
 
 ############################################
 #                 Resources                #
@@ -24,314 +131,239 @@ Parameters:
 
 Resources:
 
-##%% Custer Security Group %%###############
+##%% Node Configuration %%##################
 
-  # Control worker nodes
-  ClusterSecGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Communication with nodes
-      VpcId:
-        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
-      SecurityGroupEgress:
-        - IpProtocol: udp
-          FromPort: 53
-          ToPort: 53
-          DestinationSecurityGroupId: !Ref KDBNodeSecGroup
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          DestinationSecurityGroupId: !Ref KDBNodeSecGroup
-        - IpProtocol: tcp
-          FromPort: 1025
-          ToPort: 65535
-          DestinationSecurityGroupId: !Ref KDBNodeSecGroup
-        - IpProtocol: udp
-          FromPort: 1025
-          ToPort: 65535
-          DestinationSecurityGroupId: !Ref KDBNodeSecGroup
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443  
-          SourceSecurityGroupId: !Ref KDBNodeSecGroup
-        - IpProtocol: tcp
-          FromPort: 1025
-          ToPort: 65535
-          SourceSecurityGroupId: !Ref KDBNodeSecGroup
-        - IpProtocol: udp
-          FromPort: 1025
-          ToPort: 65535
-          SourceSecurityGroupId: !Ref KDBNodeSecGroup
-      Tags:
-        - Key: Name
-          Value: !Sub "${EnvironmentName}-Cluster-SG"
-
-  # Forward query from load balancer to kdb+s
-  KDBNodeSecGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties: 
-      GroupDescription: Allow HTTP to our kdb+s.
-      VpcId:
-        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 0
-          ToPort: 65535
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: udp
-          FromPort: 1025
-          ToPort: 65535
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-      SecurityGroupIngress:
-        - IpProtocol: udp
-          FromPort: 53
-          ToPort: 53
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-        # From master
-        - IpProtocol: tcp
-          FromPort: 1025
-          ToPort: 65535
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: udp
-          FromPort: 1025
-          ToPort: 65535
-          CidrIp: 0.0.0.0/0
-        # Maybe covered by private route table
-        - IpProtocol: '-1'
-          FromPort: 0
-          ToPort: 65535
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-      Tags:
-        - Key: Name
-          Value: !Sub "${EnvironmentName}-KDBNode-SG"
-
-##%% Create Cluster %%######################
-
-  # Role for Kuberenetes Master
-  KubernetesIAMRole:
+  NodeInstanceRole:
     Type: "AWS::IAM::Role"
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
-        Statement:
-          - Effect: "Allow"
-            Principal:
-              Service:
-                - "eks.amazonaws.com"
-            Action:
-              - "sts:AssumeRole"
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
-        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
-      Path: "/"
-      RoleName: !Sub "${EnvironmentName}-Cluster-Role"
-  
-  # Kuberenetes cluster on which kdb+s run
-  KDBCluster:
-    Type: AWS::EKS::Cluster
-    Properties: 
-      Name: !Sub ${EnvironmentName}-KDBHDB
-      Version: "1.18"
-      ResourcesVpcConfig: 
-        SecurityGroupIds:
-          - !Ref ClusterSecGroup
-        SubnetIds:
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB1-SN
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB2-SN
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
-      RoleArn: !GetAtt KubernetesIAMRole.Arn
-    DependsOn: ['KubernetesIAMRole', 'ClusterSecGroup']
-
-##%% Kubernetes Node %%#####################
-
-  NodeRole:
-    Type: AWS::IAM::Role
-    Properties: 
-      Description: Role for Node to join cluster
-      RoleName: KDBNodeRole
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
               Service:
                 - ec2.amazonaws.com
             Action:
-              - 'sts:AssumeRole'
-      Path: /
+              - "sts:AssumeRole"
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
-        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
-        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+        - "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+        - "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+      Path: /
 
-  ProfileWithRolesForKDB:
-    Type: AWS::IAM::InstanceProfile
-    Properties: 
+  NodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
       Roles:
-        - !Ref NodeRole
+        - !Ref NodeInstanceRole
 
-  # Initializer of KDB Node
-  NodeLaunchConfig:
-    Type: AWS::AutoScaling::LaunchConfiguration
+  NodeSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
     Properties:
-      AssociatePublicIpAddress: 'false'
-      # For debug
-      KeyName: !Sub ${SSHKey}
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          set -o xtrace
-          /etc/eks/bootstrap.sh ${EnvironmentName}-KDBHDB ""
-          /opt/aws/bin/cfn-signal --exit-code $? \
-                   --stack  ${AWS::StackName} \
-                   --resource NodeGroup  \
-                   --region ${AWS::Region}
-      # AWS EKS optimized-ami
-      ImageId: ami-08dfdd0ffca05d36d
-      IamInstanceProfile: !Ref ProfileWithRolesForKDB
-      SecurityGroups:
-        - Ref: KDBNodeSecGroup
-      InstanceType: t2.medium
-      BlockDeviceMappings:
-        - DeviceName: "/dev/sdk"
-          Ebs:
-            VolumeSize: '10'
-            VolumeType: gp2
-            DeleteOnTermination: true
+      GroupDescription: Security group for all nodes in the cluster
+      Tags:
+        - Key: !Sub kubernetes.io/cluster/${ClusterName}
+          Value: owned
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
 
-  # Autoscaling config
-  KDBGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
+  NodeSecurityGroupIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: NodeSecurityGroup
     Properties:
+      Description: Allow node to communicate with each other
+      FromPort: 0
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      ToPort: 65535
+  
+  NodeSecurityGroupFromControlPlaneIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow worker Kubelets and pods to receive communication from the cluster control plane
+      FromPort: 1025
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref ClusterControlPlaneSecurityGroup
+      ToPort: 65535
+
+  NodeSecurityGroupFromControlPlaneOn443Ingress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow pods running extension API servers on port 443 to receive communication from cluster control plane
+      FromPort: 443
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref ClusterControlPlaneSecurityGroup
+      ToPort: 443
+
+##%% Control Plane Configuration %%#########
+
+  ClusterControlPlaneRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: "Allow"
+          Principal:
+            Service:
+            - "eks.amazonaws.com"
+          Action:
+          - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+      Path: "/"
+      RoleName: !Sub "${ClusterName}-cluster-role"
+
+  ClusterControlPlaneSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Cluster communication with worker nodes
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+      Tags:
+      - Key: Name
+        Value: !Sub '${ClusterName}-control-plane'
+
+  ClusterControlPlaneSecurityGroupIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow pods to communicate with the cluster API Server
+      FromPort: 443
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      ToPort: 443
+
+  ControlPlaneEgressToNodeSecurityGroup:
+    Type: "AWS::EC2::SecurityGroupEgress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with worker Kubelet and pods
+      DestinationSecurityGroupId: !Ref NodeSecurityGroup
+      FromPort: 1025
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      ToPort: 65535
+
+  ControlPlaneEgressToNodeSecurityGroupOn443:
+    Type: "AWS::EC2::SecurityGroupEgress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with pods running extension API servers on port 443
+      DestinationSecurityGroupId: !Ref NodeSecurityGroup
+      FromPort: 443
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      ToPort: 443
+
+##%% Cluster %%#############################
+
+  # Kuberenetes cluster on which kdb+s run
+  KDBCluster:
+    Type: AWS::EKS::Cluster
+    Properties: 
+      Name: !Sub ${ClusterName}
+      ResourcesVpcConfig: 
+        SecurityGroupIds:
+          - !Ref ClusterControlPlaneSecurityGroup
+        SubnetIds:
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB1-SN
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB2-SN
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
+      RoleArn: !GetAtt ClusterControlPlaneRole.Arn
+    DependsOn: ['ClusterControlPlaneRole', 'ClusterControlPlaneSecurityGroup']
+
+  NodeLaunchTemplate:
+    Type: "AWS::EC2::LaunchTemplate"
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              DeleteOnTermination: true
+              VolumeSize: !Ref NodeVolumeSize
+              VolumeType: gp2
+        IamInstanceProfile:
+          Arn: !GetAtt NodeInstanceProfile.Arn
+        ImageId: !If
+          - HasNodeImageId
+          - !Ref NodeImageId
+          - !Ref NodeImageIdSSMParam
+        InstanceType: !Ref NodeInstanceType
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+        - !Ref NodeSecurityGroup
+        UserData: !Base64
+          "Fn::Sub": |
+            #!/bin/bash
+            set -o xtrace
+            /etc/eks/bootstrap.sh ${ClusterName} ${BootstrapArguments}
+            /opt/aws/bin/cfn-signal --exit-code $? \
+                     --stack  ${AWS::StackName} \
+                     --resource NodeGroup  \
+                     --region ${AWS::Region}
+        MetadataOptions:
+          HttpPutResponseHopLimit : 2
+          HttpEndpoint: enabled
+          HttpTokens: !If
+            - IMDSv1Disabled
+            - required
+            - optional
+
+  NodeGroup:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      DesiredCapacity: 2
+      LaunchTemplate:
+        LaunchTemplateId: !Ref NodeLaunchTemplate
+        Version: !GetAtt NodeLaunchTemplate.LatestVersionNumber
+      MaxSize: !Ref NodeAutoScalingGroupMaxSize
+      MinSize: !Ref NodeAutoScalingGroupMinSize
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: !Sub ${ClusterName}-${NodeGroupName}-Node
+        - Key: !Sub kubernetes.io/cluster/${ClusterName}
+          PropagateAtLaunch: true
+          Value: owned
       VPCZoneIdentifier:
         - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
         - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
-        #- Fn::ImportValue: !Sub ${EnvironmentName}-PRI3-SN
-      LaunchConfigurationName: !Ref NodeLaunchConfig
-      MinSize: '2'
-      MaxSize: '4'
-      TargetGroupARNs:
-        - Ref: KDBTargetGroup
     UpdatePolicy:
       AutoScalingRollingUpdate:
-        MinInstancesInService: '1'
-        MaxBatchSize: '1'
-
-  # Polling target
-  KDBTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      HealthCheckIntervalSeconds: 60
-      HealthCheckPath: /
-      HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 30
-      HealthyThresholdCount: 2
-      Port: 80
-      Protocol: HTTP
-      UnhealthyThresholdCount: 5
-      VpcId:
-        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
-
-  ##%% Load Balancer %%#######################
-
-  # Internet to load balancer
-  LBSecGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties: 
-      GroupDescription: Allow HTTP to load balancer
-      SecurityGroupEgress: 
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-      VpcId:
-        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
-
-  # Load balancer
-  WebAppLB:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Subnets:
-      - Fn::ImportValue: !Sub ${EnvironmentName}-PUB1-SN
-      - Fn::ImportValue: !Sub ${EnvironmentName}-PUB2-SN
-      SecurityGroups:
-      - Ref: LBSecGroup
-
-  # Bridge between load balancer and kdb+s
-  Listener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-      - Type: forward
-        TargetGroupArn:
-          Ref: KDBTargetGroup
-      LoadBalancerArn:
-        Ref: WebAppLB
-      Port: '80'
-      Protocol: HTTP
-
-  # Forward 
-  ALBListenerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      Actions:
-        - Type: forward
-          TargetGroupArn: !Ref KDBTargetGroup
-      Conditions:
-        - Field: path-pattern
-          Values: [/]
-      ListenerArn: !Ref 'Listener'
-      Priority: 1
+        MaxBatchSize: 1
+        MinInstancesInService: 1
+        PauseTime: PT5M
 
 ############################################
 #                 Outputs                  #
 ############################################
 
-Outputs: 
+Outputs:
 
+  NodeInstanceRole:
+    Description: The node instance role
+    Value: !GetAtt NodeInstanceRole.Arn
+
+  NodeSecurityGroup:
+    Description: The security group for the node group
+    Value: !Ref NodeSecurityGroup
+
+  NodeAutoScalingGroup:
+    Description: The autoscaling group
+    Value: !Ref NodeGroup
+  
   KDBCluster:
     Description: Endpoint of master node.
     Value: !Sub "${KDBCluster.Endpoint}"
     Export:
       Name: !Sub ${EnvironmentName}-MASTER-URL
-
-  NodeRole:
-    Description: ARN of node role.
-    Value: !Sub "${NodeRole.Arn}"
-    Export:
-      Name: !Sub ${EnvironmentName}-NODE-ROLE
-
-  WebAppLB:
-    Description: URL of the load balancer.
-    Value: !Sub "http://${WebAppLB.DNSName}"
-    Export:
-      Name: !Sub ${EnvironmentName}-LB-URL
