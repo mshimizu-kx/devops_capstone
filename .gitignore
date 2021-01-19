@@ -1,1 +1,3 @@
 IAC/*.bak
+.env
+keys/
