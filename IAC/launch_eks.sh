@@ -9,13 +9,21 @@ ENVIRONMENT_NAME="UdacityProject"
 NETWORK_STACKNAME="capstone-network"
 SERVER_STACKNAME="capstone-server"
 
+# Check workflow ID
+echo "Workflow ID: ${WORKFLOW_ID}"
+
 # Create stack for network
-echo "Create network stack: ${NETWORK_STACKNAME}"
-single_scripts/create_stack.sh ${NETWORK_STACKNAME} kdbhdb_network.yml kdbhdb_network_parameter.json
+echo "Create network stack: ${NETWORK_STACKNAME}-${WORKFLOW_ID}"
+aws cloudformation create-stack \
+  --stack-name ${NETWORK_STACKNAME}-${WORKFLOW_ID} \
+  --template-body file://kdbhdb_network.yml \
+  --parameters file://kdbhdb_network_parameter.json \
+  --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM" \
+  --region us-west-2
 
 # Wait for network stack to be completed
 echo -n "Waiting until network-stack build completion..."
-aws cloudformation wait stack-create-complete --stack-name ${NETWORK_STACKNAME}
+aws cloudformation wait stack-create-complete --stack-name ${NETWORK_STACKNAME}-${WORKFLOW_ID}
 if [[ $? -ne 0 ]]; then
   echo -e "\e[31mfail\e[0m"
   exit 1
@@ -24,12 +32,18 @@ else
 fi
 
 # Create stack for servers
-echo "Create server stack: ${SERVER_STACKNAME}"
-single_scripts/create_stack.sh ${SERVER_STACKNAME} kdbhdb_server.yml kdbhdb_server_parameter.json
+echo "Create server stack: ${SERVER_STACKNAME}-${WORKFLOW_ID}"
+aws cloudformation create-stack \
+  --stack-name ${SERVER_STACKNAME}-${WORKFLOW_ID} \
+  --template-body file://kdbhdb_server.yml \
+  --parameters file://kdbhdb_server_parameter.json \
+  --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM" \
+  --region us-west-2
+  --parameters ParameterKey=ClusterName,ParameterValue="${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}"
 
 # Wait for server stack to be completed
 echo -n "Waiting until server-stack build completion..."
-aws cloudformation wait stack-create-complete --stack-name ${SERVER_STACKNAME}
+aws cloudformation wait stack-create-complete --stack-name ${SERVER_STACKNAME}-${WORKFLOW_ID}
 if [[ $? -ne 0 ]]; then
   echo -e "\e[31mfail\e[0m"
   exit 1
@@ -37,17 +51,13 @@ else
   echo -e "\e[32mok\e[0m"
 fi
 
-# Update cluster to enable private access
-#echo "Enable private access for the cluster: ${ENVIRONMENT_NAME}-KDBHDB"
-#single_scripts/update_cluster.sh ${ENVIRONMENT_NAME}-KDBHDB
-
 # Add new context (cluster connection detail) to kubectl
-echo "Add connection detail to kubectl: ${ENVIRONMENT_NAME}-KDBHDB"
-single_scripts/add_connection.sh ${ENVIRONMENT_NAME}-KDBHDB
+echo "Add connection detail to kubectl: ${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}"
+single_scripts/add_connection.sh ${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}
 
 # Get Node role ARN for cluster authorization
 echo -n "Get Node Role ARN from built stack..."
-NODE_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name  ${SERVER_STACKNAME} --query 'Stacks[0].Outputs[?OutputKey==`NodeInstanceRole`].OutputValue' --output text)
+NODE_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name  ${SERVER_STACKNAME}-${WORKFLOW_ID} --query 'Stacks[0].Outputs[?OutputKey==`NodeInstanceRole`].OutputValue' --output text)
 echo -e "\e[32mok\e[0m"
 echo "Found Node Role ARN from built stack: ${NODE_ROLE_ARN}"
 
@@ -61,7 +71,7 @@ echo "Applying configuration map."
 kubectl apply -f aws-auth-cm.yml
 
 #echo "Delete copied configuration map."
-#rm aws-auth-cm.yml
+rm aws-auth-cm.yml
 
 # Wait until node becomes available
 echo "Checking if node is available..."

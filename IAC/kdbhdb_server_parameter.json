@@ -4,10 +4,6 @@
         "ParameterValue": "UdacityProject"
     },
     {
-        "ParameterKey": "ClusterName",
-        "ParameterValue": "UdacityProject-KDBHDB"
-    },
-    {
         "ParameterKey": "KeyName",
         "ParameterValue": "udacity"
     }

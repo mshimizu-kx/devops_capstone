@@ -20,4 +20,10 @@ aws eks wait cluster-active  --name ${ENVIRONMENT_NAME}-KDBHDB
 echo "Deploying application."
 kubectl apply -f deploy_service.yml
 
+# Wait until application becomes available
+echo "Checking if app is available..."
+until kubectl get pods | grep hdb | grep -m 1 "Running";
+  do echo "Checking if node is available..." && sleep 2;
+done
+
 echo "Finished."
