@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        WORKFLOW_ID = ${env.BUILD_NUMBER}
+        WORKFLOW_ID = "${env.BUILD_NUMBER}"
     }
     stages {
         stage('Linting') {
