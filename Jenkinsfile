@@ -17,35 +17,49 @@ pipeline {
         stage('Deploy_Infrastructure') {
             steps {
                 // Move to directory where cloudformation code is placed
-                sh 'cd IAC'
                 echo 'Deploy infrastructure.'
-                sh './launch_eks.sh'
-                sh 'cd ..'
+                sh script:'''
+                  #!/bin/bash
+                  cd IAC
+                  ./launch_eks.sh
+                  cd ..
+                '''
             }
         }
         stage('Deploy_Application') {
             steps {
                 // Move to directory where manifest is placed
-                sh 'cd manifest'
                 echo 'Deploy application.'
-                sh './deploy_app.sh'
-                sh 'cd ..'
+                sh script:'''
+                  #!/bin/bash
+                  cd manifest
+                  ./deploy_app.sh
+                  cd ..
+                '''
             }
         }
         stage('Run Smoke Test') {
             steps {
                 // Move to directory where test script is placed
-                sh 'cd userscript'
                 echo 'Run smoke test'
-                sh './smoke_test'
-                sh 'cd ..'
+                sh script:'''
+                  #!/bin/bash
+                  cd userscript
+                  ./smoke_test
+                  cd ..
+                '''
             }
         }
         stage('Clean up') {
             steps {
                 // Delete previous stack
                 echo 'Clean up previous cluster.'
-
+                sh script:'''
+                  #!/bin/bash
+                  cd IAC
+                  ./clean_up_old_eks.sh 
+                  cd ..
+                '''
             }
         }
     }
