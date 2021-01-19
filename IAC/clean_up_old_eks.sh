@@ -13,7 +13,7 @@ aws cloudformation wait stack-delete-complete --stack-name ${NETWORK_STACKNAME}-
 echo "Delete server stack: ${NETWORK_STACKNAME}-${OLD_WORKFLOW_ID}"
 single_scripts/delete_stack.sh ${NETWORK_STACKNAME}-${OLD_WORKFLOW_ID}
 
-echo "Waiting until server-stack is deleted..."
-aws cloudformation wait stack-delete-complete --stack-name ${NETWORK_STACKNAME}-${WORKFLOW_ID}
+# echo "Waiting until server-stack is deleted..."
+# aws cloudformation wait stack-delete-complete --stack-name ${NETWORK_STACKNAME}-${WORKFLOW_ID}
 
 echo "Clean."

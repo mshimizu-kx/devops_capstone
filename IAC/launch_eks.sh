@@ -48,6 +48,7 @@ echo "Add connection detail to kubectl: ${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID
 single_scripts/add_connection.sh ${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}
 
 # Get Node role ARN for cluster authorization
+# This might be wrong
 echo -n "Get Node Role ARN from built stack..."
 NODE_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name  ${SERVER_STACKNAME}-${WORKFLOW_ID} --query 'Stacks[0].Outputs[?OutputKey==`NODE-INSTANCE-ROLE-${WORKFLOW_ID}`].OutputValue' --output text)
 echo -e "\e[32mok\e[0m"

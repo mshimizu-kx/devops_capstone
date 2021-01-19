@@ -14,7 +14,7 @@ pipeline {
                 sh 'hadolint Dockerfile'
             }
         }
-        stage('Build Container'){
+        stage('Build_Container'){
             steps {
                 // Build container
                 sh 'docker build --tag kdb-hdb .'
