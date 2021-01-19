@@ -13,7 +13,6 @@ Parameters:
 
   WorkflowID:
     Type: String
-    Default: ""
     Description: Jenkins Buid ID
 
   EnvironmentName:

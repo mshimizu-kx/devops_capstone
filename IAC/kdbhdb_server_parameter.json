@@ -4,6 +4,14 @@
         "ParameterValue": "UdacityProject"
     },
     {
+        "ParameterKey": "WorkflowID",
+        "ParameterValue": "<WORKFLOWID>"
+    },
+    {
+        "ParameterKey": "ClusterName",
+        "ParameterValue": "<CLUSTERNAME>"
+    }
+    {
         "ParameterKey": "KeyName",
         "ParameterValue": "udacity"
     }

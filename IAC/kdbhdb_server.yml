@@ -36,7 +36,6 @@ Parameters:
 
   WorkflowID:
     Type: String
-    Default: ""
     Description: Jenkins Buid ID
 
   EnvironmentName:
@@ -50,7 +49,6 @@ Parameters:
 
   ClusterName:
     Type: String
-    Default: ""
     Description: The cluster name provided when the cluster was created. If it is incorrect, nodes will not be able to join the cluster.
 
   KeyName:
