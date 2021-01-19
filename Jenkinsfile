@@ -14,6 +14,15 @@ pipeline {
                 sh 'hadolint Dockerfile'
             }
         }
+        stage('Build Container'){
+            steps {
+                // Build container
+                sh 'docker build --tag kdb-hdb .'
+                sh 'docker tag kdb-hdb mshimizukx/kdb-hdb'
+                sh 'docker login'
+                sh 'docker push mshimizukx/kdb-hdb'
+            }
+        }
         stage('Deploy_Infrastructure') {
             steps {
                 // Move to directory where cloudformation code is placed
