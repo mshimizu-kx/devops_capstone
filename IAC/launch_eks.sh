@@ -19,7 +19,7 @@ aws cloudformation create-stack \
   --template-body file://kdbhdb_network.yml \
   --parameters file://kdbhdb_network_parameter.json \
   --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM" \
-  --region us-west-2
+  --region us-west-2 \
   --parameters ParameterKey=WorkflowID,ParameterValue="${WORKFLOW_ID}"
 
 # Wait for network stack to be completed
@@ -39,7 +39,7 @@ aws cloudformation create-stack \
   --template-body file://kdbhdb_server.yml \
   --parameters file://kdbhdb_server_parameter.json \
   --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM" \
-  --region us-west-2
+  --region us-west-2 \
   --parameters ParameterKey=WorkflowID,ParameterValue="${WORKFLOW_ID}" ParameterKey=ClusterName,ParameterValue="${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}"
 
 # Wait for server stack to be completed
