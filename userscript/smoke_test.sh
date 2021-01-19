@@ -6,7 +6,7 @@
 # Wait for 10 minutes at the longest
 COUNTER=0
 
-until [[ $(./query.sh "select from daily" | grep HIO | wc -l) -eq 1 || $COUNTER -eq 120 ]];
+until [[ $(./query.sh "select from daily" | grep price | wc -l) -eq 1 || $COUNTER -eq 120 ]];
   do echo -n "Waiting until load balancer becomes running..." && \
      COUNTER=$((COUNTER + 1)) && \
      echo "$COUNTER" && \

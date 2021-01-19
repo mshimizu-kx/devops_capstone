@@ -54,7 +54,7 @@ pipeline {
                 sh script:'''
                   #!/bin/bash
                   cd userscript
-                  ./smoke_test
+                  ./smoke_test.sh
                   cd ..
                 '''
             }

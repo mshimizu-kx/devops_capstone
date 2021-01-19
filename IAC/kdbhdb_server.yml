@@ -165,12 +165,12 @@ Resources:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
-        - Effect: "Allow"
-          Principal:
-            Service:
-            - "eks.amazonaws.com"
-          Action:
-          - "sts:AssumeRole"
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "eks.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
         - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
@@ -184,8 +184,8 @@ Resources:
       VpcId:
         Fn::ImportValue: !Sub ${EnvironmentName}-VPCID-${WorkflowID}
       Tags:
-      - Key: Name
-        Value: !Sub '${ClusterName}-control-plane'
+        - Key: Name
+          Value: !Sub '${ClusterName}-control-plane'
 
   ControlPlaneSecurityGroupIngress:
     Type: "AWS::EC2::SecurityGroupIngress"
