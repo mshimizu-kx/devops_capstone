@@ -34,6 +34,10 @@ Metadata:
 
 Parameters:
 
+  WorkflowID:
+    Type: String
+    Description: Jenkins Buid ID
+
   EnvironmentName:
     Type: String
     Description: An environment name that will be prefixed to resource names
@@ -118,7 +122,7 @@ Resources:
         - Key: !Sub kubernetes.io/cluster/${ClusterName}
           Value: owned
       VpcId:
-        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID-${WorkflowID}
 
   NodeSecurityGroupIngress:
     Type: "AWS::EC2::SecurityGroupIngress"
@@ -178,7 +182,7 @@ Resources:
     Properties:
       GroupDescription: Cluster communication with worker nodes
       VpcId:
-        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID-${WorkflowID}
       Tags:
       - Key: Name
         Value: !Sub '${ClusterName}-control-plane'
@@ -227,12 +231,12 @@ Resources:
         SecurityGroupIds:
           - !Ref ClusterControlPlaneSecurityGroup
         SubnetIds:
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB1-SN
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB2-SN
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB3-SN
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
-          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI3-SN
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB1-SN-${WorkflowID}
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB2-SN-${WorkflowID}
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB3-SN-${WorkflowID}
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN-${WorkflowID}
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN-${WorkflowID}
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI3-SN-${WorkflowID}
       RoleArn: !GetAtt ClusterControlPlaneRole.Arn
     DependsOn: ['ClusterControlPlaneRole', 'ClusterControlPlaneSecurityGroup']
 
@@ -280,9 +284,9 @@ Resources:
           PropagateAtLaunch: true
           Value: owned
       VPCZoneIdentifier:
-        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
-        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
-        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI3-SN
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN-${WorkflowID}
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN-${WorkflowID}
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI3-SN-${WorkflowID}
     UpdatePolicy:
       AutoScalingRollingUpdate:
         MaxBatchSize: 1
@@ -297,17 +301,17 @@ Outputs:
   NodeInstanceRole:
     Description: The node instance role
     Value: !GetAtt NodeInstanceRole.Arn
+    Export:
+      Name: !Sub NODE-INSTANCE-ROLE-${WorkflowID}
 
   NodeSecurityGroup:
     Description: The security group for the node group
     Value: !Ref NodeSecurityGroup
+    Export:
+      Name: !Sub NODE-SECURITY-GROUP-${WorkflowID}
 
   NodeAutoScalingGroup:
     Description: The autoscaling group
     Value: !Ref NodeGroup
-  
-  KDBCluster:
-    Description: Endpoint of master node.
-    Value: !Sub "${KDBCluster.Endpoint}"
     Export:
-      Name: !Sub ${EnvironmentName}-MASTER-URL
+      Name: !Sub NODE-AUTOSCALING-GROUP-${WorkflowID}

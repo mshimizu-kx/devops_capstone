@@ -10,6 +10,11 @@ Description: >
 ############################################
 
 Parameters:
+
+  WorkflowID:
+    Type: String
+    Description: Jenkins Buid ID
+
   EnvironmentName:
     Description: An environment name that will be prefixed to resource names
     Type: String
@@ -250,54 +255,54 @@ Outputs:
     Description: A reference to the created VPC
     Value: !Ref VPC
     Export:
-      Name: !Sub ${EnvironmentName}-VPCID
+      Name: !Sub ${EnvironmentName}-VPCID-${WorkflowID}
 
   PublicSubnets:
     Description: A list of the public subnets
     Value: !Join [ ",", [ !Ref PublicSubnet1, !Ref PublicSubnet2, !Ref PublicSubnet3 ]]
     #Value: !Join [ ",", [ !Ref PublicSubnet1, !Ref PublicSubnet2 ]]
     Export:
-      Name: !Sub ${EnvironmentName}-PUBLIC-SUBNETS
+      Name: !Sub ${EnvironmentName}-PUBLIC-SUBNETS-${WorkflowID}
 
   PrivateSubnets:
     Description: A list of the private subnets
     Value: !Join [ ",", [ !Ref PrivateSubnet1, !Ref PrivateSubnet2, !Ref PrivateSubnet3 ]]
     #Value: !Join [ ",", [ !Ref PrivateSubnet1, !Ref PrivateSubnet2 ]]
     Export:
-      Name: !Sub ${EnvironmentName}-PRIVATE-SUBNETS
+      Name: !Sub ${EnvironmentName}-PRIVATE-SUBNETS-${WorkflowID}
 
   PublicSubnet1:
     Description: A reference to the public subnet1 in the 1st Availability Zone
     Value: !Ref PublicSubnet1
     Export:
-      Name: !Sub ${EnvironmentName}-PUB1-SN
+      Name: !Sub ${EnvironmentName}-PUB1-SN-${WorkflowID}
 
   PublicSubnet2: 
     Description: A reference to the public subnet2 in the 2nd Availability Zone
     Value: !Ref PublicSubnet2
     Export:
-      Name: !Sub ${EnvironmentName}-PUB2-SN
+      Name: !Sub ${EnvironmentName}-PUB2-SN-${WorkflowID}
 
   PublicSubnet3: 
     Description: A reference to the public subnet3 in the 1st Availability Zone
     Value: !Ref PublicSubnet3
     Export:
-      Name: !Sub ${EnvironmentName}-PUB3-SN
+      Name: !Sub ${EnvironmentName}-PUB3-SN-${WorkflowID}
 
   PrivateSubnet1:
     Description: A reference to the private subnet1 in the 1st Availability Zone
     Value: !Ref PrivateSubnet1
     Export:
-      Name: !Sub ${EnvironmentName}-PRI1-SN
+      Name: !Sub ${EnvironmentName}-PRI1-SN-${WorkflowID}
 
   PrivateSubnet2: 
     Description: A reference to the private subnet2 in the 2nd Availability Zone
     Value: !Ref PrivateSubnet2
     Export:
-      Name: !Sub ${EnvironmentName}-PRI2-SN
+      Name: !Sub ${EnvironmentName}-PRI2-SN-${WorkflowID}
 
   PrivateSubnet3: 
     Description: A reference to the private subnet3 in the 1st Availability Zone
     Value: !Ref PrivateSubnet3
     Export:
-      Name: !Sub ${EnvironmentName}-PRI3-SN        
+      Name: !Sub ${EnvironmentName}-PRI3-SN-${WorkflowID}     

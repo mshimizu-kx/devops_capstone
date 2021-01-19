@@ -20,6 +20,7 @@ aws cloudformation create-stack \
   --parameters file://kdbhdb_network_parameter.json \
   --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM" \
   --region us-west-2
+  --parameters ParameterKey=WorkflowID,ParameterValue="${WORKFLOW_ID}"
 
 # Wait for network stack to be completed
 echo -n "Waiting until network-stack build completion..."
@@ -39,7 +40,7 @@ aws cloudformation create-stack \
   --parameters file://kdbhdb_server_parameter.json \
   --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM" \
   --region us-west-2
-  --parameters ParameterKey=ClusterName,ParameterValue="${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}"
+  --parameters ParameterKey=WorkflowID,ParameterValue="${WORKFLOW_ID}" ParameterKey=ClusterName,ParameterValue="${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}"
 
 # Wait for server stack to be completed
 echo -n "Waiting until server-stack build completion..."
@@ -57,7 +58,7 @@ single_scripts/add_connection.sh ${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}
 
 # Get Node role ARN for cluster authorization
 echo -n "Get Node Role ARN from built stack..."
-NODE_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name  ${SERVER_STACKNAME}-${WORKFLOW_ID} --query 'Stacks[0].Outputs[?OutputKey==`NodeInstanceRole`].OutputValue' --output text)
+NODE_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name  ${SERVER_STACKNAME}-${WORKFLOW_ID} --query 'Stacks[0].Outputs[?OutputKey==`NODE-INSTANCE-ROLE-${WORKFLOW_ID}`].OutputValue' --output text)
 echo -e "\e[32mok\e[0m"
 echo "Found Node Role ARN from built stack: ${NODE_ROLE_ARN}"
 
