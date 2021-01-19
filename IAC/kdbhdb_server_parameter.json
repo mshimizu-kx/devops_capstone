@@ -10,7 +10,7 @@
     {
         "ParameterKey": "ClusterName",
         "ParameterValue": "<CLUSTERNAME>"
-    }
+    },
     {
         "ParameterKey": "KeyName",
         "ParameterValue": "udacity"

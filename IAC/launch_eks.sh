@@ -14,7 +14,7 @@ echo "Workflow ID: ${WORKFLOW_ID}"
 
 # Create stack for network
 echo "Create network stack: ${NETWORK_STACKNAME}-${WORKFLOW_ID}"
-sed -i '.bak' 's@<WORKFLOWID>@'${WORKFLOW_ID}'@g' kdbhdb_network_parameter.json
+sed -i'.bak' 's@<WORKFLOWID>@'${WORKFLOW_ID}'@g' kdbhdb_network_parameter.json
 single_scripts/create_stack.sh ${NETWORK_STACKNAME}-${WORKFLOW_ID} kdbhdb_network.yml kdbhdb_network_parameter.json
 
 # Wait for network stack to be completed
@@ -29,8 +29,8 @@ fi
 
 # Create stack for servers
 echo "Create server stack: ${SERVER_STACKNAME}-${WORKFLOW_ID}"
-sed -i '.bak' 's@<WORKFLOWID>@'${WORKFLOW_ID}'@g' kdbhdb_server_parameter.json
-sed -i '.bak' 's@<CLUSTERNAME>@'${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}'@g' kdbhdb_server_parameter.json
+sed -i'.bak' 's@<WORKFLOWID>@'${WORKFLOW_ID}'@g' kdbhdb_server_parameter.json
+sed -i'.bak' 's@<CLUSTERNAME>@'${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}'@g' kdbhdb_server_parameter.json
 single_scripts/create_stack.sh ${SERVER_STACKNAME}-${WORKFLOW_ID} kdbhdb_server.yml kdbhdb_server_parameter.json 
 
 # Wait for server stack to be completed
