@@ -95,7 +95,18 @@ That's all!! You came riding on the wings of an eagle!! 🦅🦅🦅
 
 ### 3. Deploy Application
 
-Now you have working kubernets cluster on AWS. Let's deploy the container we built above.
+Now you have working kubernets cluster on AWS. Let's deploy the container we built above. Before executing a script, you need to complete two following notes.
+
+1. You need to change container image to your own one (`[your account name of Docker Hub]/kdb-hdb`) in `deploy_service.yml`. Also change S3 bucket name in `configmap.yml` to your bucket which contains HDB data.
+2. You need to create a file `.env` which contains your AWS access key and secret of your CLI in the source directory:
+   
+        $ echo "your_AWS_access_key" | base64 > .env
+        $ echo "your_secret" | base64 >> .env        
+        $ cat .env
+        encoded_your_AWS_access_key
+        encoded_your_secret
+
+Once you are ready, fire the application!🔥🔥🔥
 
 ```bash
 
