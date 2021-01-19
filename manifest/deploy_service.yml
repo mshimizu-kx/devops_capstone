@@ -1,15 +1,16 @@
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
 metadata:
   name: hdb
 spec:
+  replicas: 2
   selector:
     matchLabels:
-      name: hdb
+      app: kdb
   template:
     metadata:
       labels:
-        name: hdb
+        app: kdb
     spec:
       containers:
         - name: s3fuse
@@ -33,4 +34,16 @@ spec:
         - name: s3-hdbfs
           hostPath:
             path: /mnt/s3data
-            
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hdb
+spec:
+  type: LoadBalancer
+  selector:
+    app: kdb
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80

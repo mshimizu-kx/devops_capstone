@@ -23,13 +23,10 @@ Metadata:
           - NodeGroupName
           - NodeAutoScalingGroupMinSize
           - NodeAutoScalingGroupMaxSize
-          - NodeInstanceType
           - NodeImageIdSSMParam
-          - NodeImageId
           - NodeVolumeSize
           - KeyName
           - BootstrapArguments
-          - DisableIMDSv1
 
 ############################################
 #                Parameters                #
@@ -69,61 +66,15 @@ Parameters:
     Default: "KDB"
     Description: Unique identifier for the Node Group.
 
-  NodeImageId:
-    Type: String
-    Default: ""
-    Description: (Optional) Specify your own custom image ID. This value overrides any AWS Systems Manager Parameter Store value specified above.
-
   NodeImageIdSSMParam:
     Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
-    #Default: /aws/service/eks/optimized-ami/1.17/amazon-linux-2/recommended/image_id
     Default: /aws/service/eks/optimized-ami/1.18/amazon-linux-2/recommended/image_id
     Description: AWS Systems Manager Parameter Store parameter of the AMI ID for the worker node instances. Change this value to match the version of Kubernetes you are using.
 
-  DisableIMDSv1:
-    Type: String
-    Default: "false"
-    AllowedValues:
-      - "false"
-      - "true"
-
-  NodeInstanceType:
-    Type: String
-    Default: t2.medium
-    AllowedValues:
-      - t2.medium
-      - t2.micro
-      - t2.nano
-      - t2.small
-      - t2.xlarge
-      - t3.large
-      - t3.medium
-      - t3.micro
-      - t3.nano
-      - t3.small
-    ConstraintDescription: Must be a valid EC2 instance type
-    Description: EC2 instance type for the node instances
-
   NodeVolumeSize:
     Type: Number
-    Default: 10
+    Default: 20
     Description: Node volume size
-
-############################################
-#               Conditions                 #
-############################################
-
-Conditions:
-
-  HasNodeImageId: !Not
-    - "Fn::Equals":
-      - !Ref NodeImageId
-      - ""
-
-  IMDSv1Disabled:
-    "Fn::Equals":
-      - !Ref DisableIMDSv1
-      - "true"
 
 ############################################
 #                 Resources                #
@@ -136,6 +87,7 @@ Resources:
   NodeInstanceRole:
     Type: "AWS::IAM::Role"
     Properties:
+      RoleName: !Sub "${ClusterName}-worker-node-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -231,7 +183,7 @@ Resources:
       - Key: Name
         Value: !Sub '${ClusterName}-control-plane'
 
-  ClusterControlPlaneSecurityGroupIngress:
+  ControlPlaneSecurityGroupIngress:
     Type: "AWS::EC2::SecurityGroupIngress"
     DependsOn: NodeSecurityGroup
     Properties:
@@ -277,55 +229,47 @@ Resources:
         SubnetIds:
           - Fn::ImportValue: !Sub ${EnvironmentName}-PUB1-SN
           - Fn::ImportValue: !Sub ${EnvironmentName}-PUB2-SN
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PUB3-SN
           - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
           - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
+          - Fn::ImportValue: !Sub ${EnvironmentName}-PRI3-SN
       RoleArn: !GetAtt ClusterControlPlaneRole.Arn
     DependsOn: ['ClusterControlPlaneRole', 'ClusterControlPlaneSecurityGroup']
 
-  NodeLaunchTemplate:
-    Type: "AWS::EC2::LaunchTemplate"
+  NodeLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
-      LaunchTemplateData:
-        BlockDeviceMappings:
-          - DeviceName: /dev/xvda
-            Ebs:
-              DeleteOnTermination: true
-              VolumeSize: !Ref NodeVolumeSize
-              VolumeType: gp2
-        IamInstanceProfile:
-          Arn: !GetAtt NodeInstanceProfile.Arn
-        ImageId: !If
-          - HasNodeImageId
-          - !Ref NodeImageId
-          - !Ref NodeImageIdSSMParam
-        InstanceType: !Ref NodeInstanceType
-        KeyName: !Ref KeyName
-        SecurityGroupIds:
+      AssociatePublicIpAddress: 'false'
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            DeleteOnTermination: true
+            VolumeSize: !Ref NodeVolumeSize
+            VolumeType: gp2
+      IamInstanceProfile: !Ref NodeInstanceProfile
+      ImageId: !Ref NodeImageIdSSMParam
+      InstanceType: t3.medium
+      KeyName: !Ref KeyName
+      SecurityGroups:
         - !Ref NodeSecurityGroup
-        UserData: !Base64
-          "Fn::Sub": |
-            #!/bin/bash
-            set -o xtrace
-            /etc/eks/bootstrap.sh ${ClusterName} ${BootstrapArguments}
-            /opt/aws/bin/cfn-signal --exit-code $? \
-                     --stack  ${AWS::StackName} \
-                     --resource NodeGroup  \
-                     --region ${AWS::Region}
-        MetadataOptions:
-          HttpPutResponseHopLimit : 2
-          HttpEndpoint: enabled
-          HttpTokens: !If
-            - IMDSv1Disabled
-            - required
-            - optional
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -o xtrace
+          /etc/eks/bootstrap.sh ${ClusterName} ${BootstrapArguments}
+          /opt/aws/bin/cfn-signal --exit-code $? \
+                    --stack  ${AWS::StackName} \
+                    --resource NodeGroup  \
+                    --region ${AWS::Region}
 
   NodeGroup:
     Type: "AWS::AutoScaling::AutoScalingGroup"
+    DependsOn:
+      - KDBCluster
+      - NodeLaunchConfig
     Properties:
       DesiredCapacity: 2
-      LaunchTemplate:
-        LaunchTemplateId: !Ref NodeLaunchTemplate
-        Version: !GetAtt NodeLaunchTemplate.LatestVersionNumber
+      LaunchConfigurationName: !Ref NodeLaunchConfig
       MaxSize: !Ref NodeAutoScalingGroupMaxSize
       MinSize: !Ref NodeAutoScalingGroupMinSize
       Tags:
@@ -338,11 +282,11 @@ Resources:
       VPCZoneIdentifier:
         - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
         - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PRI3-SN
     UpdatePolicy:
       AutoScalingRollingUpdate:
         MaxBatchSize: 1
         MinInstancesInService: 1
-        PauseTime: PT5M
 
 ############################################
 #                 Outputs                  #

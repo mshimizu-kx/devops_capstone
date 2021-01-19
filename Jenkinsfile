@@ -1,34 +1,50 @@
 pipeline {
     agent any 
     stages {
-        stage('Static Analysis') {
+        stage('Linting') {
             steps {
-                echo 'Run the static analysis to the code' 
+                # Install hadolint
+                echo -n "Installing hadolint..."
+                wget -O /bin/hadolint https://github.com/hadolint/hadolint/releases/download/v1.16.3/hadolint-Linux-x86_64 && chmod +x /bin/hadolint
+                if [[ $? -ne 0 ]]; then
+                  echo -e "\e[31mfail\e[0m"
+                  exit 1
+                else
+                  echo -e "\e[32mok\e[0m"
+                fi
+                hadolint Dockerfile
             }
         }
-        stage('Compile') {
+        stage('Deploy_Infrastructure') {
             steps {
-                echo 'Compile the source code' 
+                # Move to directory where cloudformation code is placed
+                cd IAC
+                echo "Deploy infrastructure."
+                ./launch_eks.sh
+                cd ..
             }
         }
-        stage('Security Check') {
+        stage('Deploy_Application') {
             steps {
-                echo 'Run the security check against the application' 
+                # Move to directory where manifest is placed
+                cd manifest
+                echo "Deploy application."
+                ./deploy_app.sh
+                cd ..
             }
         }
-        stage('Run Unit Tests') {
+        stage('Run Smoke Test') {
             steps {
-                echo 'Run unit tests from the source code' 
+                # Move to directory where test script is placed
+                cd userscript
+                echo "Run smoke test"
+                ./smoke_test
+                cd ..
             }
         }
-        stage('Run Integration Tests') {
+        stage('Clean up') {
             steps {
-                echo 'Run only crucial integration tests from the source code' 
-            }
-        }
-        stage('Publish Artifacts') {
-            steps {
-                echo 'Save the assemblies generated from the compilation' 
+                echo "Clean up previous cluster."
             }
         }
     }

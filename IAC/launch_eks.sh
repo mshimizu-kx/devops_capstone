@@ -4,6 +4,7 @@
 ## @overview Create stacks for newtwork and EKS cluster.
 
 # Variables
+AWS_DEFAULT_REGION=us-west-2
 ENVIRONMENT_NAME="UdacityProject"
 NETWORK_STACKNAME="capstone-network"
 SERVER_STACKNAME="capstone-server"
@@ -59,26 +60,12 @@ sed -i'.bak' 's@<NODE_ROLE_ARN>@'${NODE_ROLE_ARN}'@g' aws-auth-cm.yml
 echo "Applying configuration map."
 kubectl apply -f aws-auth-cm.yml
 
-echo "Delete copied configuration map."
-rm aws-auth-cm.yml
+#echo "Delete copied configuration map."
+#rm aws-auth-cm.yml
 
 # Wait until node becomes available
 echo "Checking if node is available..."
 until kubectl get nodes | grep -m 1 " Ready ";
   do echo "Checking if node is available..." && sleep 2;
 done
-echo -e "\e[32mdone\e[0m"
-
-# Deploy configuration map to mount S3
-echo "Deploy configuration map for munting S3."
-kubectl apply -f ../manifest/configmap.yml
-
-# Mount S3 with Daemonset
-echo "Mounting S3 bucket."
-kubectl apply -f ../manifest/daemonset.yml
-
-# Deploy application
-echo "Deploy appication."
-kubectl apply -f ../manifest/autoscale.yml
-
-echo "Finished lauching EKS."
+echo -e "\e[32mSuccessfully launched EKS.\e[0m"

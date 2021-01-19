@@ -22,7 +22,7 @@
 \p 80
 
 // Load HDB
-system "l ", string[getenv `S3_MOUNT_POINT], "/hdb"
+system "l ", getenv[`S3_MOUNT_POINT], "/hdb"
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 //                            Global Variable                           //
