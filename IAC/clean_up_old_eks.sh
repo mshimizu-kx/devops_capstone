@@ -1,6 +1,6 @@
 #!/bin/bash
 
-OLD_WORKFLOW_ID=$(($WORKFLOW_ID-1))
+OLD_WORKFLOW_ID=$(($WORKFLOW_ID-3))
 NETWORK_STACKNAME="capstone-network"
 SERVER_STACKNAME="capstone-server"
 

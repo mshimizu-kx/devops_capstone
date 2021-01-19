@@ -2,9 +2,9 @@ FROM alpine:3.3
 
 ARG S3FS_VERSION=v1.86
 
-COPY . q/ /q/
-COPY . src/ /src/
-COPY . logs/ /logs/
+COPY q/ /q/
+COPY src/ /src/
+COPY logs/ /logs/
 COPY configure.sh configure.sh
 
 ENV S3_MOUNT_POINT /var/s3hdb
