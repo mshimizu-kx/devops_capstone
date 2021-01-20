@@ -14,7 +14,7 @@ echo "Creating configmap."
 kubectl apply -f configmap.yml
 
 # Wait for change to complete
-aws eks wait cluster-active  --name ${ENVIRONMENT_NAME}-KDBHDB
+aws eks wait cluster-active  --name ${ENVIRONMENT_NAME}-KDBHDB-${WORKFLOW_ID}
 
 # Deploy application
 echo "Deploying application."
